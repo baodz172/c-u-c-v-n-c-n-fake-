@@ -1,0 +1,597 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cần Thủ Tu Tiên - Cân Cá Toàn Bộ</title>
+    <style>
+        :root { --gold: #FFD700; --cyan: #00f2ff; --crimson: #ff0040; --hp: #2ecc71; }
+        body { margin: 0; overflow: hidden; font-family: 'Lexend', sans-serif; background: #111; color: #fff; }
+        #game-container { position: relative; width: 100vw; height: 100vh; }
+        
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .pointer { pointer-events: auto; }
+
+        /* Character Box & HP */
+        #stats-box {
+            position: absolute; top: 20px; left: 20px; display: flex; align-items: center;
+            background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 40px; border: 1px solid var(--gold);
+        }
+        #p-avatar { width: 50px; height: 50px; border-radius: 50%; border: 2px solid #fff; margin-right: 12px; overflow: hidden; }
+        #p-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .p-info b { color: var(--gold); font-size: 14px; text-transform: uppercase; }
+        .hp-bar-bg { width: 120px; height: 10px; background: #333; border-radius: 5px; margin-top: 5px; overflow: hidden; border: 1px solid #555; }
+        #player-hp-fill { width: 100%; height: 100%; background: var(--hp); transition: 0.3s; }
+
+        /* Battle Panel */
+        #battle-panel {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 350px; background: rgba(0,0,0,0.85); border: 2px solid rgba(255,255,255,0.2); border-radius: 15px;
+            padding: 12px; display: none; text-align: center; box-shadow: 0 5px 25px rgba(0,0,0,0.6);
+        }
+        .bar-bg { width: 100%; height: 16px; background: #222; border-radius: 8px; margin: 6px 0; overflow: hidden; position: relative; border: 1px solid #444; }
+        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff4d4d, #b30000); transition: 0.2s; }
+        #ten-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00ff00, #ffff00, #ff0000); transition: 0.1s; }
+        .bar-txt { position: absolute; width: 100%; top: 0; left: 0; line-height: 16px; font-weight: bold; font-size: 10px; text-shadow: 1px 1px #000; }
+
+        /* Skill Hotbar */
+        #skill-bar {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; background: rgba(0,0,0,0.6); padding: 12px; border-radius: 20px;
+        }
+        .skill-slot {
+            width: 60px; height: 60px; background: #111; border: 1px solid #444; border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; position: relative; transition: 0.2s; overflow: hidden;
+        }
+        .skill-slot.equipped { border-color: var(--gold); box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+        .skill-key { position: absolute; top: 2px; left: 4px; font-size: 10px; color: #aaa; }
+        .cd-mask { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: rgba(0,0,0,0.75); pointer-events: none; }
+
+        /* Modals */
+        .modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 85%; height: 80%; background: #0c0c10; border: 1px solid var(--gold);
+            border-radius: 20px; display: none; flex-direction: column; padding: 25px; z-index: 100;
+        }
+        .modal-tabs { display: flex; gap: 15px; margin-bottom: 15px; border-bottom: 1px solid #333; }
+        .tab-btn { padding: 8px 15px; color: #888; cursor: pointer; font-size: 14px; }
+        .tab-btn.active { color: var(--gold); border-bottom: 2px solid var(--gold); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; overflow-y: auto; flex: 1; padding: 10px; }
+        .card { background: #1a1a20; border: 1px solid #333; padding: 15px; border-radius: 12px; text-align: center; }
+        .buy-btn { width: 100%; padding: 10px; background: var(--gold); border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .buy-btn:disabled { background: #444; color: #777; }
+
+        .popup-text { position: absolute; font-weight: bold; pointer-events: none; animation: popupAnim 0.8s ease-out forwards; z-index: 1000; }
+        @keyframes popupAnim { 0% { opacity:1; transform:translateY(0) scale(1); } 100% { opacity:0; transform:translateY(-100px) scale(1.5); } }
+
+        #result-screen {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.95); padding: 40px; border-radius: 20px; border: 3px solid var(--gold);
+            text-align: center; display: none; z-index: 200;
+        }
+
+        #dodge-indicator {
+            position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+            background: rgba(231, 76, 60, 0.8); color: white; padding: 5px 20px; border-radius: 20px;
+            font-weight: bold; display: none; animation: blink 0.3s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="three-canvas"></div>
+
+    <div id="hud">
+        <div id="stats-box">
+            <div id="p-avatar"><img src="https://api.dicebear.com/7.x/pixel-art/svg?seed=ABuuFisher" alt="A Bửu"></div>
+            <div class="p-info">
+                <b>A Bửu - Cần Thủ</b>
+                <div class="hp-bar-bg"><div id="player-hp-fill"></div></div>
+                <div style="color: #2ecc71; font-weight: bold; margin-top: 2px;">💰 <span id="money-display">0</span></div>
+            </div>
+        </div>
+
+        <div id="dodge-indicator">CÁ TẤN CÔNG! NHẤN [SHIFT] ĐỂ NÉ!</div>
+
+        <!-- Battle Panel -->
+        <div id="battle-panel">
+            <div id="fish-name" style="font-size: 18px; color: var(--gold); font-weight: bold;">Cá Trắm Vây Vàng</div>
+            <div id="fish-weight" style="font-size: 13px; color: var(--cyan);">1,200 KG</div>
+            <div class="bar-bg">
+                <div id="hp-fill"></div>
+                <div class="bar-txt"><span id="hp-txt">0/0</span></div>
+            </div>
+            <div class="bar-bg">
+                <div id="ten-fill"></div>
+                <div class="bar-txt">CĂNG DÂY: <span id="ten-txt">0%</span></div>
+            </div>
+        </div>
+
+        <div id="skill-bar" class="pointer"></div>
+
+        <div style="position: absolute; bottom: 20px; right: 20px;" class="pointer text-right">
+            <button class="buy-btn" style="width: 130px; background: #222; color: var(--gold); border: 1px solid var(--gold);" onclick="openModal('shop-modal')">🛒 CỬA HÀNG</button>
+            <br>
+            <button class="buy-btn" style="width: 130px; background: #222; color: #fff; border: 1px solid #444;" onclick="openModal('inv-modal')">🎒 TÚI ĐỒ (I)</button>
+            <br>
+            <button class="buy-btn" style="width: 130px; background: #004d4d;" onclick="openModal('map-modal')">🗺️ ĐỔI MAP</button>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="shop-modal" class="modal pointer">
+        <div class="modal-tabs">
+            <div class="tab-btn active" onclick="switchTab('skills')">CHIÊU THỨC</div>
+            <div class="tab-btn" onclick="switchTab('rods')">CẦN CÂU</div>
+            <div style="flex:1"></div>
+            <div class="tab-btn" onclick="closeModal('shop-modal')">✖</div>
+        </div>
+        <div id="shop-skills" class="grid"></div>
+        <div id="shop-rods" class="grid" style="display:none"></div>
+    </div>
+
+    <div id="inv-modal" class="modal pointer">
+        <h2 style="color:var(--gold)">Kỹ Năng Đã Học</h2>
+        <div id="inv-grid" class="grid"></div>
+        <button class="buy-btn" style="width: 200px; align-self: center;" onclick="closeModal('inv-modal')">ĐÓNG</button>
+    </div>
+
+    <div id="map-modal" class="modal pointer" style="height: auto;">
+        <h2 style="color:var(--gold)">Vùng Đất Tu Tiên</h2>
+        <div id="map-grid" class="grid"></div>
+        <button class="buy-btn" style="width: 200px; align-self: center;" onclick="closeModal('map-modal')">ĐÓNG</button>
+    </div>
+
+    <div id="result-screen" class="pointer">
+        <h2 id="res-status" style="color:var(--gold)">CÂU THÀNH CÔNG!</h2>
+        <h1 id="res-fish-name">Cá Trắm Cỏ</h1>
+        <div id="res-weight" style="font-size: 32px; color: var(--cyan); font-weight: bold;">2,500 KG</div>
+        <div id="res-money" style="font-size: 20px; color: #2ecc71; margin: 10px 0;">+15,000 💰</div>
+        <button class="buy-btn" onclick="closeResult()">TIẾP TỤC</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+    // --- DATABASE ---
+    const SKILLS_DATA = [
+        { id: 0, name: "Giáng Long 18 Cần", desc: "Nội lực áp chế cá (X5 Sát thương)", price: 0, cd: 12, dur: 6, color: "#ff8c00" },
+        { id: 1, name: "Phi Thiên Vô Cực", desc: "Điều khiển dây linh hoạt (Giảm 60% Tension)", price: 5000, cd: 15, dur: 5, color: "#00bfff" },
+        { id: 2, name: "Mồi Phân Bò & Ngô", desc: "Mồi dụ cá chép biến dị (X2 Tỷ lệ cá hiếm)", price: 10000, cd: 30, dur: 20, color: "#8b4513" },
+        { id: 3, name: "Gia Cố Thép Xoắn", desc: "Dây thép xoắn cực mạnh (Không thể đứt dây)", price: 25000, cd: 40, dur: 8, color: "#bdc3c7" },
+        { id: 4, name: "Thái Cực Quyền", desc: "Dùng nhu thắng cương (Hồi 100% Tension)", price: 50000, cd: 25, dur: 0, color: "#ffffff" },
+        { id: 5, name: "Kim Cương Bất Hoại", desc: "Kháng hoàn toàn sát thương từ cá trong 5s", price: 100000, cd: 30, dur: 5, color: "#f1c40f" },
+        { id: 6, name: "Không Cắt Độc", desc: "Sát thương tối thượng (X15 Sát thương)", price: 250000, cd: 60, dur: 4, color: "#e74c3c" },
+        { id: 7, name: "Hỗn Nguyên Nhất Khí", desc: "Hợp nhất trời đất (Lập tức bắt cá)", price: 2000000, cd: 180, dur: 0, color: "#9b59b6" }
+    ];
+
+    const RODS_DATA = [
+        { id: 0, name: "Cần Trúc Truyền Thống", desc: "Lực: X1 | Bền: 100", price: 0, pwr: 1, maxT: 100 },
+        { id: 1, name: "Cần Bối Trai Tặng", desc: "Lực: X2.5 | Bền: 250", price: 5000, pwr: 2.5, maxT: 250 },
+        { id: 2, name: "Cần Thép Xoắn Vô Cực", desc: "Lực: X6 | Bền: 600", price: 25000, pwr: 6, maxT: 600 },
+        { id: 3, name: "Cần Hãng Tàu Sân Bay", desc: "Lực: X15 | Bền: 1500", price: 120000, pwr: 15, maxT: 1500 },
+        { id: 4, name: "Cần Độ Máy Kéo", desc: "Lực: X40 | Bền: 4500", price: 400000, pwr: 40, maxT: 4500 },
+        { id: 5, name: "Kim Quang Pháp Bảo", desc: "Vũ khí tối thượng của cần thủ.", price: 5000000, pwr: 150, maxT: 20000 }
+    ];
+
+    const MAPS_DATA = [
+        { id: 0, name: "Hồ Thanh Long", diff: 1, minW: 10, maxW: 1000, color: 0x87ceeb, water: 0x1a4d4d },
+        { id: 1, name: "Đầm Vạn Kiếp", diff: 15, minW: 1000, maxW: 50000, color: 0x4a004a, water: 0x330033 },
+        { id: 2, name: "Biển Vô Tận", diff: 150, minW: 50000, maxW: 5000000, color: 0x000a1a, water: 0x001a33 }
+    ];
+
+    const FISH_LIST = ["Cá Trắm Vây Vàng", "Cá Chép Hoàng Kim", "Cá Măng Khổng Lồ", "Thủy Quái Tati", "Cá Vương Vạn Cân", "Long Ngư Biến Dị", "Cá Trắm Cỏ Tu Tiên", "Megalodon Biến Dị", "Leviathan"];
+
+    // --- STATE ---
+    let player = { money: 1000, rod: 0, ownedS: [0], equippedS: [0], ownedR: [0], map: 0, hp: 100, maxHp: 100 };
+    let gameState = 'IDLE';
+    let currentFish = null;
+    let tension = 0;
+    let isReeling = false;
+    let isDodging = false;
+    let skillCDs = {};
+    let buffs = {};
+    let lastAttackTime = 0;
+    let attackWarning = false;
+
+    let scene, camera, renderer, character, rodMesh, line, water, shore, bobber, fishShadow, boats = [], jumpingFish = [], particles = [];
+
+    function init() {
+        initThree();
+        renderUI();
+        animate();
+    }
+
+    function initThree() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.Fog(0x87ceeb, 30, 150);
+
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 7, 12);
+        camera.lookAt(0, 2, -10);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('three-canvas').appendChild(renderer.domElement);
+
+        const amb = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(amb);
+        const sun = new THREE.DirectionalLight(0xffffff, 1.3);
+        sun.position.set(20, 40, 10);
+        scene.add(sun);
+
+        // Nước & Bờ
+        water = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({ color: 0x1a4d4d, roughness: 0.1, metalness: 0.4 }));
+        water.rotation.x = -Math.PI/2;
+        scene.add(water);
+
+        shore = new THREE.Mesh(new THREE.PlaneGeometry(2000, 20), new THREE.MeshStandardMaterial({ color: 0x8b4513 }));
+        shore.rotation.x = -Math.PI/2;
+        shore.position.set(0, 0.05, 10);
+        scene.add(shore);
+
+        // Nhân vật
+        character = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2.2), new THREE.MeshPhongMaterial({color: 0x333333}));
+        body.position.y = 1.1;
+        character.add(body);
+        character.position.set(0, 0, 3);
+        scene.add(character);
+
+        rodMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.1, 8), new THREE.MeshStandardMaterial({color: 0x4d2600}));
+        rodMesh.position.set(0.6, 2.5, 0);
+        rodMesh.rotation.x = -Math.PI/4;
+        character.add(rodMesh);
+
+        bobber = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshBasicMaterial({color: 0xff0000}));
+        bobber.visible = false;
+        scene.add(bobber);
+
+        // Hình bóng cá
+        const shadowGeo = new THREE.CircleGeometry(1, 32);
+        fishShadow = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({color: 0x000000, transparent: true, opacity: 0.5}));
+        fishShadow.rotation.x = -Math.PI/2;
+        fishShadow.position.y = -0.1;
+        fishShadow.visible = false;
+        scene.add(fishShadow);
+
+        line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.6}));
+        scene.add(line);
+
+        // Thuyền trang trí
+        for(let i=0; i<3; i++) createBoat();
+    }
+
+    function createBoat() {
+        const boat = new THREE.Group();
+        const hull = new THREE.Mesh(new THREE.BoxGeometry(4, 1, 2), new THREE.MeshStandardMaterial({color: 0x5d4037}));
+        boat.add(hull);
+        boat.position.set((Math.random()-0.5)*200, 0.2, -50 - Math.random()*100);
+        boat.userData = { speed: (Math.random()+0.5)*0.1 * (Math.random() > 0.5 ? 1 : -1) };
+        scene.add(boat);
+        boats.push(boat);
+    }
+
+    // FIX: Sử dụng CylinderGeometry thay cho CapsuleGeometry
+    function spawnJumpingFish() {
+        if(Math.random() > 0.985) {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5), new THREE.MeshStandardMaterial({color: 0xaaaaaa}));
+            group.add(body);
+            
+            // Thêm các chóp cầu để tạo hình viên thuốc/con cá
+            const end1 = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color: 0xaaaaaa}));
+            end1.position.y = 0.25;
+            group.add(end1);
+            const end2 = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color: 0xaaaaaa}));
+            end2.position.y = -0.25;
+            group.add(end2);
+
+            group.position.set((Math.random()-0.5)*80, -2, -10 - Math.random()*50);
+            group.rotation.z = Math.random() * Math.PI;
+            group.userData = { vy: 0.35 + Math.random()*0.2, vx: (Math.random()-0.5)*0.15, vz: (Math.random()-0.5)*0.15 };
+            
+            scene.add(group);
+            jumpingFish.push(group);
+        }
+    }
+
+    function cast() {
+        if(gameState !== 'IDLE') return;
+        gameState = 'CASTING';
+        bobber.visible = true;
+        bobber.position.set(0, 2, 0);
+        const dist = 15 + Math.random()*25;
+        let t = 0;
+        const intv = setInterval(() => {
+            t += 0.03;
+            bobber.position.z = THREE.MathUtils.lerp(3, -dist, t);
+            bobber.position.y = Math.sin(t * Math.PI) * 6;
+            if(t >= 1) {
+                clearInterval(intv);
+                bobber.position.y = 0;
+                gameState = 'WAITING';
+                setTimeout(fishBite, 1000 + Math.random()*3000);
+            }
+        }, 30);
+    }
+
+    function fishBite() {
+        if(gameState !== 'WAITING') return;
+        gameState = 'HOOKED';
+        const m = MAPS_DATA[player.map];
+        const w = m.minW + Math.random()*(m.maxW - m.minW);
+        const hp = Math.floor(w * m.diff * 6);
+        currentFish = {
+            name: FISH_LIST[Math.floor(Math.random()*FISH_LIST.length)],
+            weight: w, hp: hp, maxHp: hp,
+            reward: Math.floor(w * 3 * (player.map + 1)),
+            atkPower: Math.sqrt(w) * m.diff * 0.5
+        };
+        
+        fishShadow.visible = true;
+        const size = 1 + Math.log10(w);
+        fishShadow.scale.set(size, size, size);
+        fishShadow.position.copy(bobber.position);
+
+        tension = 0;
+        document.getElementById('battle-panel').style.display = 'block';
+        document.getElementById('fish-name').innerText = currentFish.name;
+        document.getElementById('fish-weight').innerText = w.toLocaleString() + " KG";
+        updateBattleUI();
+    }
+
+    function takeDamage(dmg) {
+        if(buffs[5] && Date.now() < buffs[5]) return; 
+        player.hp -= dmg;
+        document.getElementById('player-hp-fill').style.width = Math.max(0, (player.hp/player.maxHp*100)) + "%";
+        spawnPopup("💥 -"+Math.floor(dmg), 100, 100, "red");
+        
+        if(player.hp <= 0) {
+            gameState = 'IDLE';
+            player.hp = player.maxHp;
+            document.getElementById('player-hp-fill').style.width = "100%";
+            document.getElementById('battle-panel').style.display = 'none';
+            bobber.visible = false;
+            fishShadow.visible = false;
+            spawnPopup("BẠN ĐÃ KIỆT SỨC!", window.innerWidth/2, window.innerHeight/2, "red");
+        }
+    }
+
+    function dodge() {
+        if(isDodging || gameState !== 'HOOKED') return;
+        isDodging = true;
+        character.position.x += 3;
+        setTimeout(() => { character.position.x -= 3; isDodging = false; }, 300);
+        spawnPopup("NÉ!", window.innerWidth/2, window.innerHeight - 150, "cyan");
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        boats.forEach(b => { 
+            b.position.x += b.userData.speed; 
+            if(b.position.x > 150) b.position.x = -150; 
+            if(b.position.x < -150) b.position.x = 150;
+        });
+        
+        spawnJumpingFish();
+        jumpingFish.forEach((f, i) => {
+            f.position.y += f.userData.vy; f.position.x += f.userData.vx; f.position.z += f.userData.vz;
+            f.userData.vy -= 0.015;
+            f.rotation.x += 0.05;
+            if(f.position.y < -3) { scene.remove(f); jumpingFish.splice(i, 1); }
+        });
+
+        particles.forEach(p => { p.position.add(p.userData.v); p.scale.multiplyScalar(0.96); });
+
+        // Cập nhật dây câu
+        const tip = new THREE.Vector3(0.6, 7, 0).applyMatrix4(character.matrixWorld);
+        const lPos = line.geometry.attributes.position.array;
+        lPos[0] = tip.x; lPos[1] = tip.y; lPos[2] = tip.z;
+        lPos[3] = bobber.position.x; lPos[4] = bobber.position.y; lPos[5] = bobber.position.z;
+        line.geometry.attributes.position.needsUpdate = true;
+
+        if(gameState === 'HOOKED') {
+            const r = RODS_DATA[player.rod];
+            let dmg = 5 * r.pwr;
+            let tenAdd = 0.55;
+
+            if(buffs[0] && Date.now() < buffs[0]) dmg *= 5;
+            if(buffs[1] && Date.now() < buffs[1]) tenAdd *= 0.4;
+            if(buffs[3] && Date.now() < buffs[3]) tenAdd = 0;
+            if(buffs[6] && Date.now() < buffs[6]) dmg *= 15;
+
+            const now = Date.now();
+            if(now - lastAttackTime > 5000 + Math.random()*4000) {
+                attackWarning = true;
+                document.getElementById('dodge-indicator').style.display = 'block';
+                const currentAttackRef = now;
+                setTimeout(() => {
+                    if(gameState === 'HOOKED' && attackWarning) {
+                        if(!isDodging) takeDamage(currentFish.atkPower);
+                        document.getElementById('dodge-indicator').style.display = 'none';
+                        lastAttackTime = Date.now();
+                        attackWarning = false;
+                        playFX(0x00ffff, bobber.position);
+                    }
+                }, 1000);
+            }
+
+            if(isReeling) {
+                currentFish.hp -= dmg;
+                tension += tenAdd;
+                bobber.position.z += 0.08;
+                fishShadow.position.copy(bobber.position);
+            } else {
+                tension = Math.max(0, tension - 1.2);
+                bobber.position.z -= 0.04;
+                fishShadow.position.copy(bobber.position);
+            }
+            updateBattleUI();
+
+            if(tension >= r.maxT) {
+                gameState = 'IDLE';
+                bobber.visible = false; fishShadow.visible = false;
+                document.getElementById('battle-panel').style.display = 'none';
+                document.getElementById('dodge-indicator').style.display = 'none';
+                attackWarning = false;
+                spawnPopup("ĐỨT DÂY!", window.innerWidth/2, window.innerHeight/2, "red");
+            } else if(currentFish.hp <= 0) {
+                gameState = 'CAUGHT';
+                player.money += currentFish.reward;
+                document.getElementById('res-fish-name').innerText = currentFish.name;
+                document.getElementById('res-weight').innerText = currentFish.weight.toLocaleString() + " KG";
+                document.getElementById('res-money').innerText = "+" + currentFish.reward.toLocaleString() + " 💰";
+                document.getElementById('result-screen').style.display = 'block';
+                document.getElementById('battle-panel').style.display = 'none';
+                document.getElementById('dodge-indicator').style.display = 'none';
+                attackWarning = false;
+                fishShadow.visible = false;
+                renderUI();
+            }
+        }
+
+        player.equippedS.forEach(sid => {
+            const el = document.getElementById(`cd-${sid}`);
+            if(el) {
+                const rem = (skillCDs[sid] || 0) - Date.now();
+                el.style.height = rem > 0 ? (rem / (SKILLS_DATA[sid].cd*1000) * 100) + "%" : "0%";
+            }
+        });
+
+        renderer.render(scene, camera);
+    }
+
+    function updateBattleUI() {
+        if(!currentFish) return;
+        const r = RODS_DATA[player.rod];
+        document.getElementById('hp-fill').style.width = (currentFish.hp/currentFish.maxHp*100) + "%";
+        document.getElementById('hp-txt').innerText = Math.floor(currentFish.hp).toLocaleString() + " HP";
+        const tenPct = (tension/r.maxT*100);
+        document.getElementById('ten-fill').style.width = Math.min(100, tenPct) + "%";
+        document.getElementById('ten-txt').innerText = Math.floor(tenPct) + "%";
+    }
+
+    function useSkill(slot) {
+        const sid = player.equippedS[slot];
+        if(sid === undefined || gameState !== 'HOOKED' || (skillCDs[sid] && Date.now() < skillCDs[sid])) return;
+        const s = SKILLS_DATA[sid];
+        if(s.dur > 0) buffs[sid] = Date.now() + (s.dur * 1000);
+        if(sid === 4) tension = 0;
+        if(sid === 7) currentFish.hp = 0;
+        skillCDs[sid] = Date.now() + (s.cd * 1000);
+        spawnPopup(s.name, window.innerWidth/2, 150, s.color);
+        playFX(s.color, character.position);
+        renderSkillBar();
+    }
+
+    function playFX(color, pos) {
+        for(let i=0; i<30; i++) {
+            const p = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({color: color}));
+            p.position.copy(pos).y += 1;
+            p.userData = { v: new THREE.Vector3((Math.random()-0.5)*0.6, Math.random()*0.6, (Math.random()-0.5)*0.6) };
+            particles.push(p); scene.add(p);
+            setTimeout(() => { scene.remove(p); particles = particles.filter(x => x !== p); }, 1000);
+        }
+    }
+
+    function renderUI() {
+        document.getElementById('money-display').innerText = player.money.toLocaleString();
+        const m = MAPS_DATA[player.map];
+        water.material.color.setHex(m.water);
+        scene.background.setHex(m.color);
+        scene.fog.color.setHex(m.color);
+        renderSkillBar();
+        renderShop();
+        renderInventory();
+        renderMaps();
+    }
+
+    function renderSkillBar() {
+        const bar = document.getElementById('skill-bar'); bar.innerHTML = "";
+        for(let i=0; i<8; i++) {
+            const sid = player.equippedS[i]; const s = SKILLS_DATA[sid];
+            const slot = document.createElement('div'); slot.className = `skill-slot ${s ? 'equipped' : ''}`;
+            if(s) {
+                slot.style.color = s.color;
+                slot.innerHTML = `<span class="skill-key">${i+1}</span><small style="font-size:9px;text-align:center">${s.name.split(' ')[0]}</small><div class="cd-mask" id="cd-${sid}"></div>`;
+                slot.onclick = () => useSkill(i);
+            }
+            bar.appendChild(slot);
+        }
+    }
+
+    function renderShop() {
+        const sDiv = document.getElementById('shop-skills'); sDiv.innerHTML = "";
+        SKILLS_DATA.forEach(s => {
+            if(s.price === 0) return;
+            const owned = player.ownedS.includes(s.id);
+            sDiv.innerHTML += `<div class="card"><h4 style="color:${s.color}">${s.name}</h4><p style="font-size:11px">${s.desc}</p><button class="buy-btn" onclick="buySkill(${s.id})" ${owned ? 'disabled' : ''}>${owned ? 'ĐÃ HỌC' : s.price.toLocaleString() + ' 💰'}</button></div>`;
+        });
+        const rDiv = document.getElementById('shop-rods'); rDiv.innerHTML = "";
+        RODS_DATA.forEach(r => {
+            const owned = player.ownedR?.includes(r.id);
+            rDiv.innerHTML += `<div class="card"><h4>${r.name}</h4><p style="font-size:11px">${r.desc}</p><button class="buy-btn" onclick="buyRod(${r.id})" ${player.rod === r.id ? 'disabled' : ''}>${player.rod === r.id ? 'ĐANG DÙNG' : (owned ? 'TRANG BỊ' : r.price.toLocaleString() + ' 💰')}</button></div>`;
+        });
+    }
+
+    function renderInventory() {
+        const grid = document.getElementById('inv-grid'); grid.innerHTML = "";
+        player.ownedS.forEach(sid => {
+            const s = SKILLS_DATA[sid]; const eq = player.equippedS.includes(sid);
+            grid.innerHTML += `<div class="card"><h4 style="color:${s.color}">${s.name}</h4><button class="buy-btn" onclick="toggleSkill(${sid})">${eq ? 'GỠ BỎ' : 'TRANG BỊ'}</button></div>`;
+        });
+    }
+
+    function renderMaps() {
+        const grid = document.getElementById('map-grid'); grid.innerHTML = "";
+        MAPS_DATA.forEach(m => {
+            grid.innerHTML += `<div class="card"><h3>${m.name}</h3><button class="buy-btn" onclick="selectMap(${m.id})">ĐẾN NGAY</button></div>`;
+        });
+    }
+
+    function buySkill(id) { if(player.money >= SKILLS_DATA[id].price) { player.money -= SKILLS_DATA[id].price; player.ownedS.push(id); renderUI(); } }
+    function buyRod(id) {
+        if(!player.ownedR) player.ownedR = [0];
+        if(player.ownedR.includes(id)) player.rod = id;
+        else if(player.money >= RODS_DATA[id].price) { player.money -= RODS_DATA[id].price; player.ownedR.push(id); player.rod = id; }
+        renderUI();
+    }
+    function toggleSkill(id) {
+        const idx = player.equippedS.indexOf(id);
+        if(idx > -1) player.equippedS.splice(idx, 1);
+        else if(player.equippedS.length < 8) player.equippedS.push(id);
+        renderUI();
+    }
+    function selectMap(id) { player.map = id; closeModal('map-modal'); renderUI(); }
+    function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function switchTab(t) {
+        document.getElementById('shop-skills').style.display = t === 'skills' ? 'grid' : 'none';
+        document.getElementById('shop-rods').style.display = t === 'rods' ? 'grid' : 'none';
+    }
+    function spawnPopup(t, x, y, c) {
+        const p = document.createElement('div'); p.className = 'popup-text'; p.innerText = t;
+        p.style.left = x+'px'; p.style.top = y+'px'; p.style.color = c;
+        document.body.appendChild(p); setTimeout(()=>p.remove(), 800);
+    }
+    function closeResult() { document.getElementById('result-screen').style.display='none'; gameState='IDLE'; bobber.visible=false; fishShadow.visible=false; }
+
+    window.onkeydown = (e) => {
+        if(e.code === 'Space') { if(gameState==='IDLE') cast(); else if(gameState==='HOOKED') isReeling=true; }
+        if(e.code === 'ShiftLeft' || e.code === 'ShiftRight') dodge();
+        if(e.code === 'KeyI') openModal('inv-modal');
+        if(e.key >= '1' && e.key <= '8') useSkill(parseInt(e.key)-1);
+    };
+    window.onkeyup = (e) => { if(e.code === 'Space') isReeling = false; };
+
+    init();
+</script>
+</body>
+</html>
